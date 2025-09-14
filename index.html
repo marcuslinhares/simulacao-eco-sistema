@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Simulação de Ecossistema v10.12 - Coevolução</title>
+  <title>Simulação de Ecossistema v10.15 - Correções</title>
   <style>
     body {
       margin: 0;
@@ -72,20 +72,20 @@
       popSize: 50,
       minPop: 0,
       maxPop: 500,
-      simulationSpeed: 1,           // REDUZIDO: Para melhor observação das novas dinâmicas.
+      simulationSpeed: 0.5,
       initialPlantCount: 300,
       plantEnergy: 100,
       plantEnergyPerBite: 20,
       plantGrowthTime: 120,
-      plantReproductionRate: 0.04,  // AUMENTADO LEVEMENTE: Para compensar a nova penalidade de toxicidade.
+      plantReproductionRate: 0.04,
       plantSpreadRadius: 60,
       plantDensityRadius: 5,
       newbornEnergy: 100,
       evolutionPoints: 18,
-      geneMutationChance: 0.3,      // AUMENTADO: Animais se adaptam um pouco mais rápido.
+      geneMutationChance: 0.3,
       geneSwapAmount: 1,
       maxPlantToxicity: 6,
-      plantToxicityMutationRate: 0.05, // REDUZIDO: A evolução das plantas é mais gradual.
+      plantToxicityMutationRate: 0.05,
       plantToxicityMutationAmount: 1,
       speciesMutationRate: 0.05,
       dietSpeciationChance: 0.3,
@@ -102,7 +102,6 @@
       omnivoreEnergyPenalty: 0.8,
       graphUpdateInterval: 20,
     };
-
     const COLORS = {
       BACKGROUND: "#222", TEXT: "#0f0",
       PLANT_IMMATURE: "#228B22", PLANT_MATURE: "#32CD32",
@@ -114,7 +113,38 @@
     let paused = false;
 
     function random(min, max) { return Math.random() * (max - min) + min; }
-    function distance(p1, p2) { const dx = p1.x - p2.x; const dy = p1.y - p2.y; return Math.sqrt(dx * dx + dy * dy); }
+    function distanceSq(p1, p2) { const dx = p1.x - p2.x; const dy = p1.y - p2.y; return dx * dx + dy * dy; }
+    function distance(p1, p2) { return Math.sqrt(distanceSq(p1, p2)); }
+
+    class SpatialGrid {
+      constructor(width, height, cellSize) {
+        this.cellSize = cellSize;
+        this.grid = new Map();
+      }
+      _getKey(x, y) {
+        return `${Math.floor(x / this.cellSize)},${Math.floor(y / this.cellSize)}`;
+      }
+      clear() { this.grid.clear(); }
+      insert(item) {
+        const key = this._getKey(item.x, item.y);
+        if (!this.grid.has(key)) { this.grid.set(key, []); }
+        this.grid.get(key).push(item);
+      }
+      query(item, radius) {
+        const results = [];
+        const col = Math.floor(item.x / this.cellSize);
+        const row = Math.floor(item.y / this.cellSize);
+        for (let i = -1; i <= 1; i++) {
+          for (let j = -1; j <= 1; j++) {
+            const key = `${col + i},${row + j}`;
+            if (this.grid.has(key)) {
+              results.push(...this.grid.get(key));
+            }
+          }
+        }
+        return results;
+      }
+    }
 
     class Plant {
       constructor(x = null, y = null, parent = null) {
@@ -133,14 +163,20 @@
         this.toxicity = Math.max(0, Math.min(this.toxicity, CONFIG.maxPlantToxicity));
       }
       update() {
-        if (!this.isMature) { this.age++; if (this.age >= CONFIG.plantGrowthTime) { this.isMature = true; } }
-        // A chance de reprodução agora é penalizada pela toxicidade
-        const reproductionChance = CONFIG.plantReproductionRate * (1 - (this.toxicity / (CONFIG.maxPlantToxicity * 2)));
-
-        if (Math.random() < reproductionChance) {
-          const angle = random(0, 2 * Math.PI); const radius = random(0, CONFIG.plantSpreadRadius);
-          const newX = this.x + Math.cos(angle) * radius; const newY = this.y + Math.sin(angle) * radius;
-          world.addPlant(new Plant(newX, newY, this));
+        if (!this.isMature) {
+          this.age++;
+          if (this.age >= CONFIG.plantGrowthTime) {
+            this.isMature = true;
+          }
+        } else {
+          const reproductionChance = CONFIG.plantReproductionRate * (1 - (this.toxicity / (CONFIG.maxPlantToxicity * 2)));
+          if (Math.random() < reproductionChance) {
+            const angle = random(0, 2 * Math.PI);
+            const radius = random(0, CONFIG.plantSpreadRadius);
+            const newX = this.x + Math.cos(angle) * radius;
+            const newY = this.y + Math.sin(angle) * radius;
+            world.addPlant(new Plant(newX, newY, this));
+          }
         }
       }
       draw(ctx) {
@@ -188,11 +224,23 @@
             this.genes[geneTo] += amount;
           }
 
-          if (newSpeciesId) { this.speciesId = newSpeciesId; }
-          else { this.speciesId = Math.random() < 0.5 ? parent1.speciesId : parent2.speciesId; }
+          if (newSpeciesId) {
+            this.speciesId = newSpeciesId;
+          } else {
+            this.speciesId = Math.random() < 0.5 ? parent1.speciesId : parent2.speciesId;
+          }
 
           this.diet = Math.random() < 0.5 ? parent1.diet : parent2.diet;
-          if (newSpeciesId && Math.random() < CONFIG.dietSpeciationChance) { /* ... */ }
+
+          // CORREÇÃO: Mutação de dieta pode ocorrer em qualquer filho, não apenas em novas espécies
+          if (Math.random() < CONFIG.dietSpeciationChance * 0.1) { // Chance menor para mutação sem especiação
+            switch (this.diet) {
+              case 'herbivore': this.diet = 'omnivore'; break;
+              case 'omnivore': this.diet = Math.random() < 0.5 ? 'herbivore' : 'carnivore'; break;
+              case 'carnivore': this.diet = 'omnivore'; break;
+            }
+          }
+
         } else {
           this.speciesId = 'S1';
           this.diet = 'herbivore';
@@ -214,30 +262,40 @@
       _handleEnergyAndAge() { this.age++; const cost = (this.size * 0.07 + (this.speed * CONFIG.simulationSpeed) * 0.04) * (1 + this.age / 800); this.energy -= cost; if (this.reproductionCooldown > 0) this.reproductionCooldown--; if (this.age > CONFIG.maxAge) this.die(true); }
       die(leaveCorpse = false) { this.energy = 0; if (leaveCorpse) world.addCorpse(new Corpse(this.x, this.y, this.size * 20)); }
       _decideBehavior() { if (this.energy > CONFIG.reproductionEnergyThreshold && this.reproductionCooldown === 0) { this.behavior = "reproducing"; } else if (this.energy > CONFIG.reproductionEnergyThreshold / 2) { this.behavior = "neutral"; } else { this.behavior = "aggressive"; } }
-      _findClosest(list, filterFn = () => true, searchRadius = this.vision) {
-        let closest = null; let minDist = Infinity;
-        for (const item of list) {
-          if (!filterFn(item)) continue;
-          const d = distance(this, item);
-          if (d < searchRadius && d < minDist) { minDist = d; closest = item; }
+      _findClosest(listToIgnore, filterFn = () => true, searchRadius = this.vision) {
+        const potentialTargets = world.grid.query(this, searchRadius);
+        let closest = null;
+        let minDistSq = searchRadius * searchRadius;
+
+        for (const item of potentialTargets) {
+          if (item === this || !filterFn(item)) continue;
+          const distSq = distanceSq(this, item);
+          if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closest = item;
+          }
         }
         return closest;
       }
-      _moveTowards(target, multiplier = 1) {
-        if (!target) return; const dist = distance(this, target);
-        if (dist > 0) {
-          const dx = target.x - this.x; const dy = target.y - this.y;
-          this.x += (dx / dist) * this.speed * multiplier * CONFIG.simulationSpeed;
-          this.y += (dy / dist) * this.speed * multiplier * CONFIG.simulationSpeed;
-        }
-      }
+      // MÉTODO CORRIGIDO
       _fleeFromPredators(population) {
         const predator = this._findClosest(population, other =>
           (other.diet === 'carnivore' || other.diet === 'omnivore') &&
           other.speciesId !== this.speciesId &&
           other.attack > this.defense
         );
-        if (predator) { this.behavior = "fleeing"; const dist = distance(this, predator); if (dist > 0) { const dx = this.x - predator.x; const dy = this.y - predator.y; this.x += (dx / dist) * this.speed * 1.5 * CONFIG.simulationSpeed; this.y += (dy / dist) * this.speed * 1.5 * CONFIG.simulationSpeed; } return true; } return false;
+        if (predator) {
+          this.behavior = "fleeing";
+          const d = distance(this, predator);
+          if (d > 0) {
+            const dx = this.x - predator.x;
+            const dy = this.y - predator.y;
+            this.x += (dx / d) * this.speed * 1.5 * CONFIG.simulationSpeed;
+            this.y += (dy / d) * this.speed * 1.5 * CONFIG.simulationSpeed;
+          }
+          return true;
+        }
+        return false;
       }
       _wander() {
         this.wanderAngle += random(-0.3, 0.3);
@@ -340,20 +398,27 @@
         }
       }
       _stayWithinBounds() {
-        if (this.x < 0) this.x += canvas.width; if (this.x > canvas.width) this.x -= canvas.width;
-        if (this.y < 0) this.y += canvas.height; if (this.y > canvas.height) this.y -= canvas.height;
+        if (this.x < 0) this.x = canvas.width - 1;
+        if (this.x >= canvas.width) this.x = 0;
+        if (this.y < 0) this.y = canvas.height - 1;
+        if (this.y >= canvas.height) this.y = 0;
       }
       update(plantList, population, corpseList) {
-        if (this.energy <= 0) return; this._handleEnergyAndAge();
         if (this.energy <= 0) return;
+        this._handleEnergyAndAge();
+        if (this.energy <= 0) return;
+
         if (!this._fleeFromPredators(population)) {
           this._decideBehavior();
           switch (this.behavior) {
             case "reproducing": this._seekPartnerAndReproduce(population); break;
-            case "aggressive": case "neutral": this._huntOrForage(plantList, population, corpseList); break;
+            case "aggressive":
+            case "neutral": this._huntOrForage(plantList, population, corpseList); break;
           }
         }
-        this._consumeResources(plantList, population, corpseList); this._stayWithinBounds();
+        
+        this._consumeResources(plantList, population, corpseList);
+        this._stayWithinBounds();
       }
 
       draw(ctx) {
@@ -371,12 +436,25 @@
         }
         ctx.fill();
       }
+            // RESTAURADO
+      _moveTowards(target, multiplier = 1) {
+        if (!target) return;
+        const d = distance(this, target);
+        if (d > 0) {
+          const dx = target.x - this.x;
+          const dy = target.y - this.y;
+          this.x += (dx / d) * this.speed * multiplier * CONFIG.simulationSpeed;
+          this.y += (dy / d) * this.speed * multiplier * CONFIG.simulationSpeed;
+        }
+      }
     }
 
     class World {
       constructor() {
+        this.grid = new SpatialGrid(canvas.width, canvas.height, 100);
         this.nextSpeciesIdCounter = 2;
         this.speciesGraph = { 'S1': [] };
+        this.speciesDistanceCache = {};
         this.population = Array.from({ length: CONFIG.popSize }, () => new Individual());
         this.plants = Array.from({ length: CONFIG.initialPlantCount }, () => new Plant());
         this.corpses = [];
@@ -384,6 +462,7 @@
       }
 
       addNewSpecies(parentId1, parentId2 = null) {
+        this.speciesDistanceCache = {}; // IMPORTANTE: Limpa o cache quando o grafo muda
         const newId = 'S' + this.nextSpeciesIdCounter++;
         this.speciesGraph[newId] = [parentId1];
         if (parentId2 && parentId1 !== parentId2) {
@@ -396,20 +475,34 @@
 
       getSpeciesDistance(startNode, endNode) {
         if (startNode === endNode) return 0;
+        const key = [startNode, endNode].sort().join('-');
+
+        if (this.speciesDistanceCache[key] !== undefined) {
+          return this.speciesDistanceCache[key];
+        }
+
         let queue = [[startNode, 0]];
         let visited = new Set([startNode]);
+        let distance = Infinity;
+
         while (queue.length > 0) {
-          let [currentNode, distance] = queue.shift();
-          if (!this.speciesGraph[currentNode]) continue;
+          let [currentNode, dist] = queue.shift();
+          if (!this.speciesGraph[currentNode]) { continue; }
           for (const neighbor of this.speciesGraph[currentNode]) {
-            if (neighbor === endNode) return distance + 1;
+            if (neighbor === endNode) {
+              distance = dist + 1;
+              queue = []; // Encerra o loop
+              break;
+            }
             if (!visited.has(neighbor)) {
               visited.add(neighbor);
-              queue.push([neighbor, distance + 1]);
+              queue.push([neighbor, dist + 1]);
             }
           }
         }
-        return Infinity;
+
+        this.speciesDistanceCache[key] = distance;
+        return distance;
       }
 
 
@@ -525,11 +618,23 @@
         this.drawGraph();
       }
 
+      // MÉTODO CORRIGIDO
       update() {
+        this.grid.clear();
+        this.population.forEach(ind => this.grid.insert(ind));
+        this.plants.forEach(plant => this.grid.insert(plant));
+        this.corpses.forEach(corpse => this.grid.insert(corpse));
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (CONFIG.minPop && this.population.length < CONFIG.minPop && this.population.length > 0) { this.addIndividual(new Individual()); }
+
+        if (CONFIG.minPop && this.population.length < CONFIG.minPop && this.population.length > 0) {
+          this.addIndividual(new Individual());
+        }
+
         this.plants.forEach(p => p.update());
+
         [...this.population].forEach(ind => ind.update(this.plants, this.population, this.corpses));
+
         this.population = this.population.filter(ind => ind.energy > 0);
 
         this.plants.forEach(p => p.draw(ctx));
@@ -540,7 +645,7 @@
         if (this.framesSinceGraphUpdate >= CONFIG.graphUpdateInterval) {
           this.time++;
           this.framesSinceGraphUpdate = 0;
-          this.pruneSpeciesGraph(); // <-- CHAMA A FUNÇÃO DE LIMPEZA AQUI
+          this.pruneSpeciesGraph();
           this.drawSpeciesGraph(gctx);
         }
 
