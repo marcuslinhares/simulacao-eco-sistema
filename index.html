@@ -3,45 +3,13 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Simulação de Ecossistema v10.15 - Correções</title>
+  <title>Simulação de Ecossistema v10.15 - Correção Final</title>
   <style>
-    body {
-      margin: 0;
-      background: #111;
-      color: #0f0;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .container {
-      padding: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      width: 800px;
-      gap: 15px;
-    }
-
-    button {
-      background: #222;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #0f0;
-      color: #111;
-    }
-
-    canvas {
-      display: block;
-      background: #222;
-      border: 1px solid #0f0;
-    }
+    body { margin: 0; background: #111; color: #0f0; font-family: monospace; display: flex; flex-direction: column; align-items: center; }
+    .container { padding: 10px; display: flex; flex-wrap: wrap; justify-content: center; width: 800px; gap: 15px; }
+    button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 5px 10px; cursor: pointer; }
+    button:hover { background: #0f0; color: #111; }
+    canvas { display: block; background: #222; border: 1px solid #0f0; }
   </style>
 </head>
 
@@ -50,8 +18,7 @@
     <span>Tempo: <b id="time">0</b></span> |
     <span>População: <b id="pop">0</b></span> |
     <span>Espécies: <b id="speciesCount">0</b></span>
-    <span>| IDs: <b id="speciesIds"></b></span> | <span style="color: #32CD32;">Plantas: <b
-        id="plantCount">0</b></span>|
+    <span>| IDs: <b id="speciesIds"></b></span> | <span style="color: #32CD32;">Plantas: <b id="plantCount">0</b></span>|
     <span style="color: #00ff7f;">Herbívoros: <b id="herbivores">0</b></span> |
     <span style="color: #dc143c;">Carnívoros: <b id="carnivores">0</b></span> |
     <span style="color: #4169e1;">Onívoros: <b id="omnivores">0</b></span>
@@ -102,6 +69,7 @@
       omnivoreEnergyPenalty: 0.8,
       graphUpdateInterval: 20,
     };
+
     const COLORS = {
       BACKGROUND: "#222", TEXT: "#0f0",
       PLANT_IMMATURE: "#228B22", PLANT_MATURE: "#32CD32",
@@ -109,7 +77,7 @@
       HERBIVORE_LINE: "#00ff7f", CARNIVORE_LINE: "#dc143c", OMNIVORE_LINE: "#4169e1"
     };
 
-    let world;
+	let world;
     let paused = false;
 
     function random(min, max) { return Math.random() * (max - min) + min; }
@@ -200,7 +168,9 @@
         this.x = parent1 ? (parent1.x + parent2.x) / 2 : random(0, canvas.width);
         this.y = parent1 ? (parent1.y + parent2.y) / 2 : random(0, canvas.height);
         this.energy = CONFIG.newbornEnergy;
-        this.age = 0; this.behavior = "neutral"; this.reproductionCooldown = 0;
+        this.age = 0;
+        this.behavior = "neutral";
+        this.reproductionCooldown = 0;
         this.wanderAngle = random(0, Math.PI * 2);
 
         const stats = ['size', 'speed', 'vision', 'attack', 'defense', 'tolerance'];
@@ -232,8 +202,7 @@
 
           this.diet = Math.random() < 0.5 ? parent1.diet : parent2.diet;
 
-          // CORREÇÃO: Mutação de dieta pode ocorrer em qualquer filho, não apenas em novas espécies
-          if (Math.random() < CONFIG.dietSpeciationChance * 0.1) { // Chance menor para mutação sem especiação
+          if (Math.random() < CONFIG.dietSpeciationChance * 0.1) {
             switch (this.diet) {
               case 'herbivore': this.diet = 'omnivore'; break;
               case 'omnivore': this.diet = Math.random() < 0.5 ? 'herbivore' : 'carnivore'; break;
@@ -262,11 +231,11 @@
       _handleEnergyAndAge() { this.age++; const cost = (this.size * 0.07 + (this.speed * CONFIG.simulationSpeed) * 0.04) * (1 + this.age / 800); this.energy -= cost; if (this.reproductionCooldown > 0) this.reproductionCooldown--; if (this.age > CONFIG.maxAge) this.die(true); }
       die(leaveCorpse = false) { this.energy = 0; if (leaveCorpse) world.addCorpse(new Corpse(this.x, this.y, this.size * 20)); }
       _decideBehavior() { if (this.energy > CONFIG.reproductionEnergyThreshold && this.reproductionCooldown === 0) { this.behavior = "reproducing"; } else if (this.energy > CONFIG.reproductionEnergyThreshold / 2) { this.behavior = "neutral"; } else { this.behavior = "aggressive"; } }
+      
       _findClosest(listToIgnore, filterFn = () => true, searchRadius = this.vision) {
         const potentialTargets = world.grid.query(this, searchRadius);
         let closest = null;
         let minDistSq = searchRadius * searchRadius;
-
         for (const item of potentialTargets) {
           if (item === this || !filterFn(item)) continue;
           const distSq = distanceSq(this, item);
@@ -277,7 +246,6 @@
         }
         return closest;
       }
-      // MÉTODO CORRIGIDO
       _fleeFromPredators(population) {
         const predator = this._findClosest(population, other =>
           (other.diet === 'carnivore' || other.diet === 'omnivore') &&
@@ -317,22 +285,18 @@
           if (distance(this, partner) < this.size * 2 + partner.size) {
             const speciesDistance = world.getSpeciesDistance(this.speciesId, partner.speciesId);
             const successChance = 1 - (speciesDistance / (CONFIG.maxReproductiveDistance + 1));
-
             this.energy -= CONFIG.reproductionEnergyCost;
             partner.energy -= CONFIG.reproductionEnergyCost;
             const cooldown = this.diet === 'herbivore' ? CONFIG.herbivoreCooldown : (this.diet === 'carnivore' ? CONFIG.carnivoreCooldown : CONFIG.omnivoreCooldown);
             this.reproductionCooldown = cooldown;
             partner.reproductionCooldown = cooldown;
-
             let child1SpeciesId = null;
             let child2SpeciesId = null;
-
             if (Math.random() < CONFIG.speciesMutationRate) {
               const newId = world.addNewSpecies(this.speciesId, partner.speciesId);
               child1SpeciesId = newId;
               child2SpeciesId = newId;
             }
-
             if (Math.random() < successChance) {
               world.addIndividual(new Individual(this, partner, child1SpeciesId));
             }
@@ -366,6 +330,7 @@
         else { this._wander(); }
       }
 
+
       _consumeResources(plantList, population, corpseList) {
         const energyPenalty = this.diet === 'omnivore' ? CONFIG.omnivoreEnergyPenalty : 1;
         if (this.diet !== 'carnivore') {
@@ -387,9 +352,7 @@
         }
         if (this.diet !== 'herbivore') {
           for (const prey of population) {
-            // A CONDIÇÃO DE CAÇA FOI ALTERADA
             if (prey === this || prey.energy <= 0 || this.attack <= prey.defense || this.speciesId === prey.speciesId) continue;
-
             if (distance(this, prey) < this.size) {
               const energyBonus = prey.diet === 'herbivore' ? CONFIG.carnivoreHerbivoreBonus : CONFIG.carnivoreCarnivoreBonus;
               this.energy += prey.energy * energyBonus * energyPenalty; prey.die(false); break;
@@ -407,7 +370,6 @@
         if (this.energy <= 0) return;
         this._handleEnergyAndAge();
         if (this.energy <= 0) return;
-
         if (!this._fleeFromPredators(population)) {
           this._decideBehavior();
           switch (this.behavior) {
@@ -416,7 +378,6 @@
             case "neutral": this._huntOrForage(plantList, population, corpseList); break;
           }
         }
-        
         this._consumeResources(plantList, population, corpseList);
         this._stayWithinBounds();
       }
@@ -436,7 +397,7 @@
         }
         ctx.fill();
       }
-            // RESTAURADO
+  
       _moveTowards(target, multiplier = 1) {
         if (!target) return;
         const d = distance(this, target);
@@ -447,7 +408,7 @@
           this.y += (dy / d) * this.speed * multiplier * CONFIG.simulationSpeed;
         }
       }
-    }
+    } 
 
     class World {
       constructor() {
