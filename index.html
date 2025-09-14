@@ -36,39 +36,40 @@
     const gctx = graphCanvas.getContext("2d");
 
     const CONFIG = {
-      popSize: 50,
-      minPop: 0,
-      maxPop: 700,
-      simulationSpeed: 0.5,
-      initialPlantCount: 300,
-      plantEnergy: 100,
-      plantEnergyPerBite: 20,
-      plantGrowthTime: 120,
-      plantReproductionRate: 0.04,
-      plantSpreadRadius: 60,
-      plantDensityRadius: 5,
-      newbornEnergy: 100,
-      evolutionPoints: 18,
-      geneMutationChance: 0.3,
-      geneSwapAmount: 1,
-      maxPlantToxicity: 6,
-      plantToxicityMutationRate: 0.05,
-      plantToxicityMutationAmount: 1,
-      speciesMutationRate: 0.05,
-      dietSpeciationChance: 0.3,
-      maxReproductiveDistance: 2,
-      maxAge: 1500,
-      reproductionEnergyCost: 60,
-      reproductionEnergyThreshold: 120,
-      matingCallRangeMultiplier: 2.5,
-      herbivoreCooldown: 250,
-      carnivoreCooldown: 400,
-      omnivoreCooldown: 300,
-      carnivoreHerbivoreBonus: 0.8,
-      carnivoreCarnivoreBonus: 0.5,
-      omnivoreEnergyPenalty: 0.8,
-      graphUpdateInterval: 20,
-    };
+  popSize: 25,                  // REDUZIDO: Para uma base populacional pequena e gerenciável.
+  minPop: 0,
+  maxPop: 150,                  // REDUZIDO: Um teto populacional mais baixo.
+  simulationSpeed: 0.5,
+  initialPlantCount: 150,       // REDUZIDO: Menos comida para menos animais.
+  plantEnergy: 100,
+  plantEnergyPerBite: 20,
+  plantGrowthTime: 120,
+  plantReproductionRate: 0.025, // REDUZIDO: A comida se regenera um pouco mais devagar.
+  plantSpreadRadius: 60,
+  plantDensityRadius: 5,
+  newbornEnergy: 100,
+  evolutionPoints: 18,
+  geneMutationChance: 0.3,
+  geneSwapAmount: 1,
+  maxPlantToxicity: 6,
+  plantToxicityMutationRate: 0.05,
+  plantToxicityMutationAmount: 1,
+  speciesMutationRate: 0.08,    // AUMENTADO: Compensa o menor n° de nascimentos para manter a evolução ativa.
+  dietSpeciationChance: 0.3,
+  maxReproductiveDistance: 3,     // AUMENTADO: Mais flexibilidade para encontrar parceiros.
+  maxAge: 1500,
+  reproductionEnergyCost: 60,
+  reproductionEnergyThreshold: 120,
+  matingCallRangeMultiplier: 3.5, // AUMENTADO: Maior alcance para encontrar parceiros.
+  herbivoreCooldown: 250,
+  carnivoreCooldown: 400,
+  omnivoreCooldown: 300,
+  carnivoreHerbivoreBonus: 0.8,
+  carnivoreCarnivoreBonus: 0.5,
+  omnivoreEnergyPenalty: 0.8,
+  graphUpdateInterval: 20,
+};
+	  
 
     const COLORS = {
       BACKGROUND: "#222", TEXT: "#0f0",
