@@ -518,11 +518,12 @@
         this.population.forEach(ind => ind.draw(ctx));
 
         this.framesSinceGraphUpdate++;
-        if (this.framesSinceGraphUpdate >= CONFIG.graphUpdateInterval) {
-          this.time++;
-          this.framesSinceGraphUpdate = 0;
-          this.drawSpeciesGraph(gctx);
-        }
+		if (this.framesSinceGraphUpdate >= CONFIG.graphUpdateInterval) {
+  		this.time++;
+  		this.framesSinceGraphUpdate = 0;
+  		this.pruneSpeciesGraph(); // <-- CHAMA A FUNÇÃO DE LIMPEZA AQUI
+  		this.drawSpeciesGraph(gctx);
+		}
 
         const speciesSet = new Set(this.population.map(ind => ind.speciesId));
         const herbivoreCount = this.population.filter(ind => ind.diet === 'herbivore').length;
@@ -562,6 +563,33 @@
         drawLine(this.history.herbivores, COLORS.HERBIVORE_LINE);
         drawLine(this.history.carnivores, COLORS.CARNIVORE_LINE);
         drawLine(this.history.omnivores, COLORS.OMNIVORE_LINE);
+      }
+      
+      pruneSpeciesGraph() {
+        const activeSpecies = new Set(this.population.map(ind => ind.speciesId));
+        let pruned = true;
+        
+        while (pruned) {
+            pruned = false;
+            const allNodes = Object.keys(this.speciesGraph);
+
+            for (const nodeId of allNodes) {
+                if (nodeId === 'S1') continue; // Nunca remove a raiz original
+                if (!activeSpecies.has(nodeId)) {
+                    const neighbors = this.speciesGraph[nodeId];
+                    if (neighbors && neighbors.length <= 1) {
+                        if (neighbors.length === 1) {
+                            const neighborId = neighbors[0];
+                            if (this.speciesGraph[neighborId]) {
+                                this.speciesGraph[neighborId] = this.speciesGraph[neighborId].filter(n => n !== nodeId);
+                            }
+                        }
+                        delete this.speciesGraph[nodeId];
+                        pruned = true;
+                    }
+                }
+            }
+        }
       }
     }
 
