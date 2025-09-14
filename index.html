@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Simulação de Ecossistema v10.9 - Evolução em Grafo</title>
+  <title>Simulação de Ecossistema v10.12 - Coevolução</title>
   <style>
     body {
       margin: 0;
@@ -50,8 +50,8 @@
     <span>Tempo: <b id="time">0</b></span> |
     <span>População: <b id="pop">0</b></span> |
     <span>Espécies: <b id="speciesCount">0</b></span>
-    <span>| IDs: <b id="speciesIds"></b></span> | <span style="color: #32CD32;">Plantas: <b id="plantCount">0</b></span>
-    |
+    <span>| IDs: <b id="speciesIds"></b></span> | <span style="color: #32CD32;">Plantas: <b
+        id="plantCount">0</b></span>|
     <span style="color: #00ff7f;">Herbívoros: <b id="herbivores">0</b></span> |
     <span style="color: #dc143c;">Carnívoros: <b id="carnivores">0</b></span> |
     <span style="color: #4169e1;">Onívoros: <b id="omnivores">0</b></span>
@@ -60,7 +60,7 @@
     <button onclick="togglePause()"><span id="pauseText">Pausar</span></button>
   </div>
   <canvas id="world" width="800" height="400"></canvas>
-  <canvas id="graph" width="800" height="1000"></canvas>
+  <canvas id="graph" width="800" height="200"></canvas>
 
   <script>
     const canvas = document.getElementById("world");
@@ -69,28 +69,31 @@
     const gctx = graphCanvas.getContext("2d");
 
     const CONFIG = {
-      popSize: 25,                  // REDUZIDO: Começa com uma população pequena.
+      popSize: 50,
       minPop: 0,
-      maxPop: 120,                  // REDUZIDO: O teto do ecossistema é bem mais baixo.
-      simulationSpeed: 1,
-      initialPlantCount: 150,       // REDUZIDO: Menos comida inicial para menos animais.
+      maxPop: 500,
+      simulationSpeed: 1,           // REDUZIDO: Para melhor observação das novas dinâmicas.
+      initialPlantCount: 300,
       plantEnergy: 100,
       plantEnergyPerBite: 20,
       plantGrowthTime: 120,
-      plantReproductionRate: 0.02,  // REDUZIDO: A comida se regenera um pouco mais devagar.
+      plantReproductionRate: 0.04,  // AUMENTADO LEVEMENTE: Para compensar a nova penalidade de toxicidade.
       plantSpreadRadius: 60,
       plantDensityRadius: 5,
       newbornEnergy: 100,
-      evolutionPoints: 15,
-      geneMutationChance: 0.25,
+      evolutionPoints: 18,
+      geneMutationChance: 0.3,      // AUMENTADO: Animais se adaptam um pouco mais rápido.
       geneSwapAmount: 1,
-      speciesMutationRate: 0.08,    // AUMENTADO: Compensa o menor n° de nascimentos para manter a evolução ativa.
+      maxPlantToxicity: 6,
+      plantToxicityMutationRate: 0.05, // REDUZIDO: A evolução das plantas é mais gradual.
+      plantToxicityMutationAmount: 1,
+      speciesMutationRate: 0.05,
       dietSpeciationChance: 0.3,
-      maxReproductiveDistance: 3,     // AUMENTADO: Mais flexibilidade para encontrar parceiros em um mundo vazio.
+      maxReproductiveDistance: 2,
       maxAge: 1500,
       reproductionEnergyCost: 60,
       reproductionEnergyThreshold: 120,
-      matingCallRangeMultiplier: 3.5, // AUMENTADO: "Grito" de acasalamento com maior alcance.
+      matingCallRangeMultiplier: 2.5,
       herbivoreCooldown: 250,
       carnivoreCooldown: 400,
       omnivoreCooldown: 300,
@@ -114,23 +117,35 @@
     function distance(p1, p2) { const dx = p1.x - p2.x; const dy = p1.y - p2.y; return Math.sqrt(dx * dx + dy * dy); }
 
     class Plant {
-      constructor(x = null, y = null) {
+      constructor(x = null, y = null, parent = null) {
         this.x = x === null ? random(0, canvas.width) : x;
         this.y = y === null ? random(0, canvas.height) : y;
         this.age = 0; this.isMature = false; this.energy = CONFIG.plantEnergy;
+
+        if (parent) {
+          this.toxicity = parent.toxicity;
+          if (Math.random() < CONFIG.plantToxicityMutationRate) {
+            this.toxicity += Math.random() < 0.5 ? CONFIG.plantToxicityMutationAmount : -CONFIG.plantToxicityMutationAmount;
+          }
+        } else {
+          this.toxicity = 0;
+        }
+        this.toxicity = Math.max(0, Math.min(this.toxicity, CONFIG.maxPlantToxicity));
       }
       update() {
         if (!this.isMature) { this.age++; if (this.age >= CONFIG.plantGrowthTime) { this.isMature = true; } }
-        else {
-          if (Math.random() < CONFIG.plantReproductionRate) {
-            const angle = random(0, 2 * Math.PI); const radius = random(0, CONFIG.plantSpreadRadius);
-            const newX = this.x + Math.cos(angle) * radius; const newY = this.y + Math.sin(angle) * radius;
-            world.addPlant(new Plant(newX, newY));
-          }
+        // A chance de reprodução agora é penalizada pela toxicidade
+        const reproductionChance = CONFIG.plantReproductionRate * (1 - (this.toxicity / (CONFIG.maxPlantToxicity * 2)));
+
+        if (Math.random() < reproductionChance) {
+          const angle = random(0, 2 * Math.PI); const radius = random(0, CONFIG.plantSpreadRadius);
+          const newX = this.x + Math.cos(angle) * radius; const newY = this.y + Math.sin(angle) * radius;
+          world.addPlant(new Plant(newX, newY, this));
         }
       }
       draw(ctx) {
-        ctx.fillStyle = this.isMature ? COLORS.PLANT_MATURE : COLORS.PLANT_IMMATURE;
+        const hue = 120 - (this.toxicity / CONFIG.maxPlantToxicity) * 60;
+        ctx.fillStyle = this.isMature ? `hsl(${hue}, 100%, 50%)` : COLORS.PLANT_IMMATURE;
         ctx.beginPath();
         const maxRadius = 3; const minRadius = 1;
         const radius = this.isMature ? minRadius + (maxRadius - minRadius) * (this.energy / CONFIG.plantEnergy) : 1.5;
@@ -152,17 +167,19 @@
         this.age = 0; this.behavior = "neutral"; this.reproductionCooldown = 0;
         this.wanderAngle = random(0, Math.PI * 2);
 
+        const stats = ['size', 'speed', 'vision', 'attack', 'defense', 'tolerance'];
+
         if (parent1 && parent2) {
           this.genes = {
             size: (parent1.genes.size + parent2.genes.size) / 2,
             speed: (parent1.genes.speed + parent2.genes.speed) / 2,
             vision: (parent1.genes.vision + parent2.genes.vision) / 2,
-            attack: (parent1.genes.attack + parent2.genes.attack) / 2, // Adicionado
-            defense: (parent1.genes.defense + parent2.genes.defense) / 2, // Adicionado
+            attack: (parent1.genes.attack + parent2.genes.attack) / 2,
+            defense: (parent1.genes.defense + parent2.genes.defense) / 2,
+            tolerance: (parent1.genes.tolerance + parent2.genes.tolerance) / 2,
           };
 
           if (Math.random() < CONFIG.geneMutationChance) {
-            const stats = ['size', 'speed', 'vision', 'attack', 'defense']; // Atualizado
             const geneFrom = stats[Math.floor(Math.random() * stats.length)];
             let geneTo = stats[Math.floor(Math.random() * stats.length)];
             while (geneTo === geneFrom) { geneTo = stats[Math.floor(Math.random() * stats.length)]; }
@@ -171,27 +188,16 @@
             this.genes[geneTo] += amount;
           }
 
-          if (newSpeciesId) {
-            this.speciesId = newSpeciesId;
-          } else {
-            this.speciesId = Math.random() < 0.5 ? parent1.speciesId : parent2.speciesId;
-          }
+          if (newSpeciesId) { this.speciesId = newSpeciesId; }
+          else { this.speciesId = Math.random() < 0.5 ? parent1.speciesId : parent2.speciesId; }
 
           this.diet = Math.random() < 0.5 ? parent1.diet : parent2.diet;
-          if (newSpeciesId && Math.random() < CONFIG.dietSpeciationChance) {
-            switch (this.diet) {
-              case 'herbivore': this.diet = 'omnivore'; break;
-              case 'omnivore': this.diet = Math.random() < 0.5 ? 'herbivore' : 'carnivore'; break;
-              case 'carnivore': this.diet = 'omnivore'; break;
-            }
-          }
+          if (newSpeciesId && Math.random() < CONFIG.dietSpeciationChance) { /* ... */ }
         } else {
           this.speciesId = 'S1';
           this.diet = 'herbivore';
-          this.genes = { size: 1, speed: 1, vision: 1, attack: 1, defense: 1 }; // Adicionados
-          let pointsToDistribute = CONFIG.evolutionPoints - 5;
-          const stats = ['size', 'speed', 'vision', 'attack', 'defense']; // Adicionados
-
+          this.genes = { size: 1, speed: 1, vision: 1, attack: 1, defense: 1, tolerance: 1 };
+          let pointsToDistribute = CONFIG.evolutionPoints - stats.length;
           for (let i = 0; i < pointsToDistribute; i++) {
             this.genes[stats[Math.floor(Math.random() * stats.length)]]++;
           }
@@ -200,15 +206,10 @@
         this.size = 1 + this.genes.size * 0.7;
         this.speed = 0.5 + this.genes.speed * 0.15;
         this.vision = 20 + this.genes.vision * 14;
-
-        this.speed = Math.max(0.1, this.speed);
-        this.size = Math.max(1, this.size);
-        this.vision = Math.max(20, this.vision);
-
         this.attack = this.genes.attack * 0.5;
         this.defense = this.genes.defense * 0.5;
+        this.tolerance = this.genes.tolerance * 0.5;
       }
-
 
       _handleEnergyAndAge() { this.age++; const cost = (this.size * 0.07 + (this.speed * CONFIG.simulationSpeed) * 0.04) * (1 + this.age / 800); this.energy -= cost; if (this.reproductionCooldown > 0) this.reproductionCooldown--; if (this.age > CONFIG.maxAge) this.die(true); }
       die(leaveCorpse = false) { this.energy = 0; if (leaveCorpse) world.addCorpse(new Corpse(this.x, this.y, this.size * 20)); }
@@ -231,7 +232,11 @@
         }
       }
       _fleeFromPredators(population) {
-        const predator = this._findClosest(population, other => (other.diet === 'carnivore' || other.diet === 'omnivore') && other.speciesId !== this.speciesId && other.size > this.size * 1.2);
+        const predator = this._findClosest(population, other =>
+          (other.diet === 'carnivore' || other.diet === 'omnivore') &&
+          other.speciesId !== this.speciesId &&
+          other.attack > this.defense
+        );
         if (predator) { this.behavior = "fleeing"; const dist = distance(this, predator); if (dist > 0) { const dx = this.x - predator.x; const dy = this.y - predator.y; this.x += (dx / dist) * this.speed * 1.5 * CONFIG.simulationSpeed; this.y += (dy / dist) * this.speed * 1.5 * CONFIG.simulationSpeed; } return true; } return false;
       }
       _wander() {
@@ -285,21 +290,35 @@
       _huntOrForage(plantList, population, corpseList) {
         let target = null;
         switch (this.diet) {
-          case 'herbivore': target = this._findClosest(plantList, p => p.isMature); if (!target) target = this._findClosest(corpseList); break;
-          case 'carnivore': target = this._findClosest(population, other => other.diet === 'herbivore' && other.speciesId !== this.speciesId); if (!target) target = this._findClosest(corpseList); if (!target) target = this._findClosest(population, other => other !== this && other.diet !== 'herbivore' && other.speciesId !== this.speciesId); break;
-          case 'omnivore': target = this._findClosest(population, other => other !== this && other.speciesId !== this.speciesId); if (!target) target = this._findClosest(corpseList); if (!target) target = this._findClosest(plantList, p => p.isMature); break;
+          case 'herbivore':
+            target = this._findClosest(plantList, p => p.isMature && this.tolerance >= p.toxicity);
+            if (!target) target = this._findClosest(corpseList);
+            break;
+          case 'carnivore':
+            target = this._findClosest(population, other => other.diet !== 'carnivore' && this.attack > other.defense);
+            if (!target) target = this._findClosest(corpseList);
+            break;
+          case 'omnivore':
+            target = this._findClosest(population, other => this.attack > other.defense);
+            if (!target) target = this._findClosest(plantList, p => p.isMature && this.tolerance >= p.toxicity);
+            if (!target) target = this._findClosest(corpseList);
+            break;
         }
-        if (target) { this._moveTowards(target, this.behavior === "aggressive" ? 1.2 : 1); } else { this._wander(); }
+        if (target) { this._moveTowards(target, this.behavior === "aggressive" ? 1.2 : 1); }
+        else { this._wander(); }
       }
+
       _consumeResources(plantList, population, corpseList) {
         const energyPenalty = this.diet === 'omnivore' ? CONFIG.omnivoreEnergyPenalty : 1;
         if (this.diet !== 'carnivore') {
           for (let i = plantList.length - 1; i >= 0; i--) {
             const plant = plantList[i];
-            if (plant.isMature && distance(this, plant) < this.size + 3) {
+            if (plant.isMature && distance(this, plant) < this.size + 3 && this.tolerance >= plant.toxicity) {
               const energyToTransfer = Math.min(plant.energy, CONFIG.plantEnergyPerBite);
-              this.energy += energyToTransfer * energyPenalty; plant.energy -= energyToTransfer;
-              if (plant.energy <= 0) { plantList.splice(i, 1); } break;
+              this.energy += energyToTransfer * energyPenalty;
+              plant.energy -= energyToTransfer;
+              if (plant.energy <= 0) { plantList.splice(i, 1); }
+              break;
             }
           }
           for (let i = corpseList.length - 1; i >= 0; i--) {
@@ -518,12 +537,12 @@
         this.population.forEach(ind => ind.draw(ctx));
 
         this.framesSinceGraphUpdate++;
-		if (this.framesSinceGraphUpdate >= CONFIG.graphUpdateInterval) {
-  		this.time++;
-  		this.framesSinceGraphUpdate = 0;
-  		this.pruneSpeciesGraph(); // <-- CHAMA A FUNÇÃO DE LIMPEZA AQUI
-  		this.drawSpeciesGraph(gctx);
-		}
+        if (this.framesSinceGraphUpdate >= CONFIG.graphUpdateInterval) {
+          this.time++;
+          this.framesSinceGraphUpdate = 0;
+          this.pruneSpeciesGraph(); // <-- CHAMA A FUNÇÃO DE LIMPEZA AQUI
+          this.drawSpeciesGraph(gctx);
+        }
 
         const speciesSet = new Set(this.population.map(ind => ind.speciesId));
         const herbivoreCount = this.population.filter(ind => ind.diet === 'herbivore').length;
@@ -564,31 +583,31 @@
         drawLine(this.history.carnivores, COLORS.CARNIVORE_LINE);
         drawLine(this.history.omnivores, COLORS.OMNIVORE_LINE);
       }
-      
+
       pruneSpeciesGraph() {
         const activeSpecies = new Set(this.population.map(ind => ind.speciesId));
         let pruned = true;
-        
-        while (pruned) {
-            pruned = false;
-            const allNodes = Object.keys(this.speciesGraph);
 
-            for (const nodeId of allNodes) {
-                if (nodeId === 'S1') continue; // Nunca remove a raiz original
-                if (!activeSpecies.has(nodeId)) {
-                    const neighbors = this.speciesGraph[nodeId];
-                    if (neighbors && neighbors.length <= 1) {
-                        if (neighbors.length === 1) {
-                            const neighborId = neighbors[0];
-                            if (this.speciesGraph[neighborId]) {
-                                this.speciesGraph[neighborId] = this.speciesGraph[neighborId].filter(n => n !== nodeId);
-                            }
-                        }
-                        delete this.speciesGraph[nodeId];
-                        pruned = true;
-                    }
+        while (pruned) {
+          pruned = false;
+          const allNodes = Object.keys(this.speciesGraph);
+
+          for (const nodeId of allNodes) {
+            if (nodeId === 'S1') continue; // Nunca remove a raiz original
+            if (!activeSpecies.has(nodeId)) {
+              const neighbors = this.speciesGraph[nodeId];
+              if (neighbors && neighbors.length <= 1) {
+                if (neighbors.length === 1) {
+                  const neighborId = neighbors[0];
+                  if (this.speciesGraph[neighborId]) {
+                    this.speciesGraph[neighborId] = this.speciesGraph[neighborId].filter(n => n !== nodeId);
+                  }
                 }
+                delete this.speciesGraph[nodeId];
+                pruned = true;
+              }
             }
+          }
         }
       }
     }
